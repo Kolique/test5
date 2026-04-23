@@ -3,7 +3,6 @@ import sharp from 'sharp'
 import { prisma } from '@/lib/db'
 import { requireUser } from '@/lib/auth'
 import { saveUpload } from '@/lib/storage'
-import path from 'path'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -30,7 +29,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       const f = files[i]
       if (!f.type.startsWith('image/')) continue
       const raw = Buffer.from(await f.arrayBuffer())
-      // Normalize: auto-rotate, resize to max 2400px, convert to jpeg for consistency
+      // Normalize: auto-rotate (EXIF), resize to max 2400px, convert to jpeg
       const processed = await sharp(raw)
         .rotate()
         .resize({ width: 2400, height: 2400, fit: 'inside', withoutEnlargement: true })
@@ -38,7 +37,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         .toBuffer()
 
       const { url } = await saveUpload(
-        `properties/${room.propertyId}/${room.id}`,
+        `properties/${room.propertyId}/${room.id}/photos`,
         processed,
         '.jpg'
       )

@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server'
-import path from 'path'
 import { prisma } from '@/lib/db'
 import { requireUser } from '@/lib/auth'
 import { buildPanorama } from '@/lib/stitching'
-import { ensureUploadDir, publicUrl, localPathFromUrl } from '@/lib/storage'
-import { shortId } from '@/lib/utils'
+import { saveUpload, fetchAsBuffer, removeUpload } from '@/lib/storage'
 
 export const runtime = 'nodejs'
-export const maxDuration = 120
+export const maxDuration = 60
 
 export async function POST(_: Request, { params }: { params: { id: string } }) {
   try {
@@ -27,39 +25,42 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
         { status: 400 }
       )
 
-    // Mark processing synchronously, then run stitching in-band (fast enough for MVP)
     await prisma.room.update({
       where: { id: room.id },
       data: { status: 'processing' },
     })
 
-    // Run the stitch
+    const previousPano = room.panoramaUrl
+    const previousThumb = room.thumbnailUrl
+
     try {
-      const subdir = `properties/${room.propertyId}/${room.id}/pano`
-      const outDir = await ensureUploadDir(subdir)
-      const panoFilename = `pano-${shortId()}.jpg`
-      const thumbFilename = `thumb-${shortId()}.jpg`
-      const outputPath = path.join(outDir, panoFilename)
-      const thumbPath = path.join(outDir, thumbFilename)
-
-      const photoPaths = room.photos.map((p) => localPathFromUrl(p.url))
-
-      const { width, height } = await buildPanorama(
-        photoPaths,
-        outputPath,
-        thumbPath
+      const photoBuffers = await Promise.all(
+        room.photos.map((p) => fetchAsBuffer(p.url))
       )
+
+      const { panoramaBuffer, thumbnailBuffer, width, height } =
+        await buildPanorama(photoBuffers)
+
+      const subdir = `properties/${room.propertyId}/${room.id}/pano`
+      const [pano, thumb] = await Promise.all([
+        saveUpload(subdir, panoramaBuffer, '.jpg'),
+        saveUpload(subdir, thumbnailBuffer, '.jpg'),
+      ])
 
       await prisma.room.update({
         where: { id: room.id },
         data: {
           status: 'ready',
-          panoramaUrl: publicUrl(subdir, panoFilename),
-          thumbnailUrl: publicUrl(subdir, thumbFilename),
+          panoramaUrl: pano.url,
+          thumbnailUrl: thumb.url,
           width,
           height,
         },
       })
+
+      // Best-effort cleanup of the previous panorama/thumbnail blobs
+      if (previousPano) removeUpload(previousPano).catch(() => {})
+      if (previousThumb) removeUpload(previousThumb).catch(() => {})
     } catch (err) {
       console.error('Stitching failed', err)
       await prisma.room.update({

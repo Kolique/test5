@@ -1,41 +1,42 @@
-import { promises as fs } from 'fs'
-import path from 'path'
+import { put, del } from '@vercel/blob'
 import { shortId } from './utils'
-
-const UPLOAD_ROOT = path.join(process.cwd(), 'public', 'uploads')
-
-export async function ensureUploadDir(subdir: string) {
-  const dir = path.join(UPLOAD_ROOT, subdir)
-  await fs.mkdir(dir, { recursive: true })
-  return dir
-}
-
-export function publicUrl(subdir: string, filename: string) {
-  return `/uploads/${subdir}/${filename}`
-}
 
 export async function saveUpload(
   subdir: string,
   buffer: Buffer,
   ext: string
-): Promise<{ filePath: string; url: string; filename: string }> {
-  const dir = await ensureUploadDir(subdir)
+): Promise<{ url: string; filename: string }> {
   const filename = `${shortId()}${ext.startsWith('.') ? ext : `.${ext}`}`
-  const filePath = path.join(dir, filename)
-  await fs.writeFile(filePath, buffer)
-  return { filePath, url: publicUrl(subdir, filename), filename }
+  const pathname = `${subdir}/${filename}`.replace(/\/+/g, '/')
+  const blob = await put(pathname, buffer, {
+    access: 'public',
+    contentType: guessContentType(ext),
+    addRandomSuffix: false,
+    cacheControlMaxAge: 60 * 60 * 24 * 365,
+  })
+  return { url: blob.url, filename }
 }
 
 export async function removeUpload(url: string) {
-  if (!url.startsWith('/uploads/')) return
-  const p = path.join(process.cwd(), 'public', url)
+  if (!url) return
   try {
-    await fs.unlink(p)
+    await del(url)
   } catch {
-    /* ignore */
+    /* ignore — blob might already be gone */
   }
 }
 
-export function localPathFromUrl(url: string) {
-  return path.join(process.cwd(), 'public', url)
+export async function fetchAsBuffer(url: string): Promise<Buffer> {
+  const res = await fetch(url, { cache: 'no-store' })
+  if (!res.ok)
+    throw new Error(`Failed to fetch ${url}: ${res.status} ${res.statusText}`)
+  return Buffer.from(await res.arrayBuffer())
+}
+
+function guessContentType(ext: string): string {
+  const e = ext.toLowerCase().replace(/^\./, '')
+  if (e === 'jpg' || e === 'jpeg') return 'image/jpeg'
+  if (e === 'png') return 'image/png'
+  if (e === 'webp') return 'image/webp'
+  return 'application/octet-stream'
 }

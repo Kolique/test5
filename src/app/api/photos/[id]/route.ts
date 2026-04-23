@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db'
 import { requireUser } from '@/lib/auth'
 import { removeUpload } from '@/lib/storage'
 
+export const runtime = 'nodejs'
+
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
   try {
     const user = await requireUser()

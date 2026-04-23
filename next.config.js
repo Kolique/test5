@@ -5,7 +5,10 @@ const nextConfig = {
     serverComponentsExternalPackages: ['sharp'],
   },
   images: {
-    remotePatterns: [{ protocol: 'https', hostname: '**' }],
+    remotePatterns: [
+      { protocol: 'https', hostname: '*.public.blob.vercel-storage.com' },
+      { protocol: 'https', hostname: '*.blob.vercel-storage.com' },
+    ],
   },
   async headers() {
     return [
@@ -13,7 +16,7 @@ const nextConfig = {
         source: '/embed/:slug*',
         headers: [
           { key: 'X-Frame-Options', value: 'ALLOWALL' },
-          { key: 'Content-Security-Policy', value: "frame-ancestors *" },
+          { key: 'Content-Security-Policy', value: 'frame-ancestors *' },
         ],
       },
     ]
