@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String     @id @default(cuid())
+  email       String     @unique
+  password    String
+  name        String?
+  agencyName  String?
+  createdAt   DateTime   @default(now())
+  properties  Property[]
+}
+
+model Property {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  address     String?
+  description String?
+  price       String?
+  surface     String?
+  rooms       Room[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Room {
+  id         String    @id @default(cuid())
+  propertyId String
+  property   Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name       String
+  order      Int       @default(0)
+  status     String    @default("pending") // pending | processing | ready | failed
+  panoramaUrl String?
+  thumbnailUrl String?
+  width      Int?
+  height     Int?
+  photos     Photo[]
+  hotspots   Hotspot[] @relation("SourceRoom")
+  incoming   Hotspot[] @relation("TargetRoom")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Photo {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  url       String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model Hotspot {
+  id           String @id @default(cuid())
+  sourceRoomId String
+  targetRoomId String
+  source       Room   @relation("SourceRoom", fields: [sourceRoomId], references: [id], onDelete: Cascade)
+  target       Room   @relation("TargetRoom", fields: [targetRoomId], references: [id], onDelete: Cascade)
+  pitch        Float  @default(0)
+  yaw          Float  @default(0)
+  label        String?
+  createdAt    DateTime @default(now())
+}
